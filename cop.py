@@ -5,7 +5,7 @@ import rsa
 public_key, private_key = rsa.newkeys(2048)
 public_partner = None
 hostname = socket.gethostname()
-IP = '216.48.140.219'
+IP = '127.0.0.1'
 print("Your Computer Name is:" + hostname)
 print("Your Computer IP Address is:" + IP)
 

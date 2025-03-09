@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure WebSocket Chat</title>
+    <style>
+        /* Global styles */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        h1 {
+            color: #3a3a3a;
+            margin-bottom: 20px;
+        }
+
+        #username-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        input {
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            width: 250px;
+            margin-bottom: 10px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            border-color: #007bff;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        #chat {
+            width: 100%;
+            max-width: 600px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            height: 300px;
+            overflow-y: auto;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+            background-color: #fafafa;
+        }
+
+        #chat p {
+            margin: 10px 0;
+            padding: 5px;
+            border-radius: 5px;
+            background-color: #f1f1f1;
+        }
+
+        #chat .user {
+            background-color: #d1e7fd;
+            text-align: left;
+        }
+
+        #chat .them {
+            background-color: #e2e2e2;
+            text-align: right;
+        }
+
+        #message {
+            width: 100%;
+            max-width: 600px;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            margin-top: 10px;
+            outline: none;
+        }
+
+        .footer {
+            font-size: 14px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Secure WebSocket Chat</h1>
+
+    <!-- Username input section -->
+    <div id="username-section">
+        <input type="text" id="username" placeholder="Enter your username">
+        <button onclick="setUsername()">Set Username</button>
+    </div>
+
+    <div id="chat" style="display:none;"></div>
+
+    <input type="text" id="message" placeholder="Type a message..." style="display:none;">
+    <button onclick="sendMessage()" style="display:none;">Send</button>
+
+    <p class="footer" id="status"></p>
+
+    <script>
+        let publicKeyReceived = false;
+        let username = "";
+        let ws;
+
+        // Function to set username
+        function setUsername() {
+            username = document.getElementById("username").value.trim();
+            if (username === "") {
+                alert("Please enter a username.");
+                return;
+            }
+            document.getElementById("username-section").style.display = "none";  // Hide username input section
+            document.getElementById("chat").style.display = "block";  // Show chat area
+            document.getElementById("message").style.display = "block";  // Show message input
+            document.querySelector("button[onclick='sendMessage()']").style.display = "block"; // Show send button
+            document.getElementById("status").textContent = `Welcome, ${username}!`; // Update footer status
+            initiateWebSocketConnection();
+        }
+
+        // Function to initiate WebSocket connection
+        function initiateWebSocketConnection() {
+            ws = new WebSocket("ws://127.0.0.1:8000/ws/" + username);
+
+            ws.onopen = () => {
+                console.log("✅ WebSocket Connected");
+                document.getElementById("status").textContent = `Connected to chat as ${username}`;
+            };
+
+            ws.onerror = (error) => {
+                console.error("❌ WebSocket Error:", error);
+                document.getElementById("status").textContent = "Error connecting to chat";
+            };
+
+            ws.onclose = () => {
+                console.warn("⚠️ WebSocket Disconnected");
+                document.getElementById("status").textContent = "Connection lost. Please refresh.";
+            };
+
+            ws.onmessage = (event) => {
+                console.log("🔧 Received Message:", event.data);
+
+                // If we haven't received the public key, it means the received data is the public key
+                if (!publicKeyReceived) {
+                    console.log("🔑 Received Public Key:", event.data);
+                    if (event.data.startsWith("-----BEGIN RSA PUBLIC KEY-----")) {
+                        publicKeyReceived = true;
+                    }
+                    return; // Don't process public key as a chat message
+                }
+
+                // Process normal chat messages
+                try {
+                    const messageData = JSON.parse(event.data);
+                    console.log("Received message data:", messageData);
+                    const chat = document.getElementById("chat");
+                    const messageClass = messageData.username === username ? 'user' : 'them';
+                    chat.innerHTML += `<p class="${messageClass}"><strong>${messageData.username}:</strong> ${messageData.message}</p>`;
+                    chat.scrollTop = chat.scrollHeight; // Scroll to the bottom of the chat
+                } catch (error) {
+                    console.error("Error parsing message:", error);
+                }
+            };
+        }
+
+        // Function to send messages
+        function sendMessage() {
+            const message = document.getElementById("message").value;
+            if (!message.trim()) {
+                console.warn("⚠️ No message entered");
+                return;
+            }
+
+            console.log("📤 Sending message:", message);
+            const messageData = { username: username, message: message };
+            ws.send(JSON.stringify(messageData)); // Send message via WebSocket
+
+            // Display the sent message in the chat
+            const chat = document.getElementById("chat");
+            chat.innerHTML += `<p class="user"><strong>You:</strong> ${message}</p>`;
+            chat.scrollTop = chat.scrollHeight; // Scroll to the bottom of the chat
+
+            document.getElementById("message").value = ""; // Clear input field
+        }
+    </script>
+
+</body>
+</html>
